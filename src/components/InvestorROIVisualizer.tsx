@@ -111,19 +111,99 @@ export const InvestorROIVisualizer = () => {
   // Active chart tab
   const [activeChartTab, setActiveChartTab] = useState<'payouts' | 'cumFlow' | 'sensitivity'>('payouts');
 
+  // ATB-specific states
+  const [selectedATBProgram, setSelectedATBProgram] = useState<string | null>(null);
+  const [atbSafetyRebate, setAtbSafetyRebate] = useState<boolean>(false);
+  const [atbGovMatch, setAtbGovMatch] = useState<boolean>(false);
+
+  // Pre-configured ATB programs
+  const atbPrograms = useMemo(() => [
+    {
+      id: 'atb_accelerator',
+      name: 'ATB Alberta Tech & Retail Accelerator',
+      category: 'Commercial Credit',
+      description: 'Concessionary lending to integrate advanced FLIR thermal diagnostics and secure night-shift convenience facilities across urban Alberta.',
+      targetAmount: 150000,
+      fundingType: 'debt' as FundingStructure,
+      interestRate: 6.5,
+      loanTerm: 5,
+      benefit: '1.5% under prime rate. Subsidized by Alberta Municipal Security Grants.',
+      underwritingStatus: 'Pre-Approved'
+    },
+    {
+      id: 'atb_franchise',
+      name: 'ATB Franchise Fast-Track Program',
+      category: 'Franchise Fast-Track',
+      description: 'Streamlined credit approval matching pre-vetted SafeMart franchise formats. Features extended loan terms and lowered collateral hurdles.',
+      targetAmount: 100000,
+      fundingType: 'debt' as FundingStructure,
+      interestRate: 7.25,
+      loanTerm: 7,
+      benefit: '7-year amortized term with zero prepayment penalties.',
+      underwritingStatus: 'Pre-Approved'
+    },
+    {
+      id: 'atb_co_equity',
+      name: 'ATB Co-Investment Equity Fund',
+      category: 'Co-Equity Partner',
+      description: 'Direct corporate capital allocation alongside accredited regional micro-investors. Maximizes high-margin early rollout along critical commuter corridors.',
+      targetAmount: 250000,
+      fundingType: 'equity' as FundingStructure,
+      equityOffered: 18,
+      divPayoutRatio: 40,
+      exitMultiple: 9,
+      benefit: 'ATB matches up to 50% of co-investor retail equity contributions.',
+      underwritingStatus: 'Matching Active'
+    },
+    {
+      id: 'atb_rev_share',
+      name: 'ATB Community Yield Pool',
+      category: 'Revenue Share',
+      description: 'Structured royalty-backed community financing targeting safe late-night food deserts. Yield is directly serviced via top-line retail sales.',
+      targetAmount: 80000,
+      fundingType: 'rev_share' as FundingStructure,
+      revSharePct: 4.5,
+      repaymentCapMultiplier: 1.8,
+      benefit: 'Capped liability. Directly aligns repayments with weekly sales performance.',
+      underwritingStatus: 'Pre-Approved'
+    }
+  ], []);
+
+  const handleApplyATBProgram = (prog: typeof atbPrograms[0]) => {
+    setSelectedATBProgram(prog.id);
+    setFundingType(prog.fundingType);
+    setPrincipal(prog.targetAmount);
+    
+    if (prog.fundingType === 'debt') {
+      if (prog.interestRate) setInterestRate(prog.interestRate);
+      if (prog.loanTerm) setLoanTerm(prog.loanTerm);
+    } else if (prog.fundingType === 'equity') {
+      if (prog.equityOffered) setEquityOffered(prog.equityOffered);
+      if (prog.divPayoutRatio) setDivPayoutRatio(prog.divPayoutRatio);
+      if (prog.exitMultiple) setExitMultiple(prog.exitMultiple);
+    } else if (prog.fundingType === 'rev_share') {
+      if (prog.revSharePct) setRevSharePct(prog.revSharePct);
+      if (prog.repaymentCapMultiplier) setRepaymentCapMultiplier(prog.repaymentCapMultiplier);
+    }
+  };
+
   // Perform financial calculations over a 5-year model
   const financials = useMemo(() => {
     const years = [1, 2, 3, 4, 5];
     const dataPoints: any[] = [];
     
+    const effectivePrincipal = atbGovMatch ? principal * 0.70 : principal;
+    const effectiveInterestRate = (fundingType === 'debt' && atbSafetyRebate) ? Math.max(1.0, interestRate - 0.75) : interestRate;
+    const effectiveExitMultiple = (fundingType === 'equity' && atbSafetyRebate) ? exitMultiple + 0.5 : exitMultiple;
+
     // Track core company projections
     let currentRevenue = y1Revenue;
     const marginRatio = netMargin / 100;
     
     // Arrays to feed into IRR/NPV solvers
     // Year 0 Cash flow is the negative initial investment
-    const investorCashFlows = [-principal];
-    const companyCashFlows = [principal]; // capital injection
+    const investorCashFlows = [-effectivePrincipal];
+    const companyCashFlows = [effectivePrincipal]; // capital injection
 
     let cumulativeInvestorReturn = 0;
     let companyValue = 0;
@@ -144,7 +224,7 @@ export const InvestorROIVisualizer = () => {
         remainingProfit = netProfit - totalDividends;
       } else if (fundingType === 'debt') {
         // Simple amortized loan repayment formula (annual equivalent)
-        const rate = interestRate / 100;
+        const rate = effectiveInterestRate / 100;
         const annualPayment = (principal * rate * Math.pow(1 + rate, loanTerm)) / (Math.pow(1 + rate, loanTerm) - 1);
         if (yr <= loanTerm) {
           investorPayout = annualPayment;
@@ -173,7 +253,7 @@ export const InvestorROIVisualizer = () => {
 
       // Estimate company valuation based on Year 5 exit multiples
       // Standard EBITDA multiple projection or PE multiple for retail
-      companyValue = netProfit * exitMultiple;
+      companyValue = netProfit * effectiveExitMultiple;
 
       dataPoints.push({
         year: `Year ${yr}`,
@@ -188,7 +268,7 @@ export const InvestorROIVisualizer = () => {
 
     // For equity funding, the exit scenario includes selling the equity stake in Year 5
     if (fundingType === 'equity') {
-      const year5Valuation = dataPoints[4].netProfit * exitMultiple;
+      const year5Valuation = dataPoints[4].netProfit * effectiveExitMultiple;
       const equityExitValue = year5Valuation * (equityOffered / 100);
       
       // Add the liquidation of equity to Year 5 cash flow
@@ -202,8 +282,8 @@ export const InvestorROIVisualizer = () => {
       ? cumulativeInvestorReturn + (dataPoints[4].exitPayoff || 0)
       : cumulativeInvestorReturn;
       
-    const roiMultiplier = totalReturn / principal;
-    const netReturnPercent = ((totalReturn - principal) / principal) * 100;
+    const roiMultiplier = totalReturn / effectivePrincipal;
+    const netReturnPercent = ((totalReturn - effectivePrincipal) / effectivePrincipal) * 100;
     
     const irr = calculateIRR(investorCashFlows);
     const npv = calculateNPV(investorCashFlows, 0.10); // Standard 10% discount hurdle rate
@@ -217,7 +297,7 @@ export const InvestorROIVisualizer = () => {
         // Calculate cumulative Year 5 payout for each coordinate
         let testRev = y1Revenue;
         let testCumReturn = 0;
-        let testCumPayoutArray = [-principal];
+        let testCumPayoutArray = [-effectivePrincipal];
 
         for (let t = 1; t <= 5; t++) {
           if (t > 1) testRev = testRev * (1 + growth / 100);
@@ -227,7 +307,7 @@ export const InvestorROIVisualizer = () => {
           if (fundingType === 'equity') {
             testPayout = (testProfit * (divPayoutRatio / 100)) * (equityOffered / 100);
           } else if (fundingType === 'debt') {
-            const rate = interestRate / 100;
+            const rate = effectiveInterestRate / 100;
             const annualPayment = (principal * rate * Math.pow(1 + rate, loanTerm)) / (Math.pow(1 + rate, loanTerm) - 1);
             testPayout = t <= loanTerm ? annualPayment : 0;
           } else if (fundingType === 'rev_share') {
@@ -243,7 +323,7 @@ export const InvestorROIVisualizer = () => {
 
         if (fundingType === 'equity') {
           const testY5Profit = testRev * (margin / 100);
-          const testExitVal = testY5Profit * exitMultiple;
+          const testExitVal = testY5Profit * effectiveExitMultiple;
           const exitPayoff = testExitVal * (equityOffered / 100);
           testCumReturn += exitPayoff;
           testCumPayoutArray[5] += exitPayoff;
@@ -277,7 +357,9 @@ export const InvestorROIVisualizer = () => {
     interestRate, 
     loanTerm, 
     revSharePct, 
-    repaymentCapMultiplier
+    repaymentCapMultiplier,
+    atbSafetyRebate,
+    atbGovMatch
   ]);
 
   // Quick formatted values helper
@@ -353,6 +435,145 @@ export const InvestorROIVisualizer = () => {
             Revenue Share
           </button>
         </div>
+      </div>
+
+      {/* ATB DYNAMIC INVESTMENT OPPORTUNITIES PANEL */}
+      <div className="mb-10 bg-gradient-to-r from-emerald-950/20 via-sky-950/20 to-zinc-950 border border-emerald-500/20 p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
+          <div className="space-y-1">
+            <span className="text-[10px] tracking-[0.25em] uppercase text-emerald-400 font-mono font-bold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
+              Dynamic ATB Institutional Capital Pathways
+            </span>
+            <h3 className="text-xl font-light text-white tracking-tight">
+              Pre-Underwritten Alberta Treasury Branches (ATB) Programs
+            </h3>
+            <p className="text-[11px] text-slate-400">
+              Click any of the tailored commercial capital packages below. The interactive ROI engine will dynamically re-route, lock key constraints, and underwrite the returns.
+            </p>
+          </div>
+
+          {/* Quick interactive parameters */}
+          <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+            {/* Toggle 1: Safety Rebate */}
+            <button
+              type="button"
+              onClick={() => setAtbSafetyRebate(!atbSafetyRebate)}
+              className={`px-3 py-1.5 border transition-all flex items-center gap-2 cursor-pointer ${
+                atbSafetyRebate 
+                  ? 'border-emerald-400 bg-emerald-400/10 text-emerald-400 font-bold shadow-[0_0_10px_rgba(16,185,129,0.15)]' 
+                  : 'border-white/5 bg-zinc-950/40 text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              <Shield className={`w-3.5 h-3.5 ${atbSafetyRebate ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span>Safety-Glass Concession (-0.75% rate)</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded ${atbSafetyRebate ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5 text-slate-500'}`}>
+                {atbSafetyRebate ? 'ACTIVE' : 'OFF'}
+              </span>
+            </button>
+
+            {/* Toggle 2: Government Grant Matching */}
+            <button
+              type="button"
+              onClick={() => setAtbGovMatch(!atbGovMatch)}
+              className={`px-3 py-1.5 border transition-all flex items-center gap-2 cursor-pointer ${
+                atbGovMatch 
+                  ? 'border-sky-400 bg-sky-400/10 text-sky-400 font-bold shadow-[0_0_10px_rgba(56,189,248,0.15)]' 
+                  : 'border-white/5 bg-zinc-950/40 text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              <Zap className={`w-3.5 h-3.5 ${atbGovMatch ? 'text-sky-400' : 'text-slate-400'}`} />
+              <span>30% Govt Co-Match (Outlay Drop)</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded ${atbGovMatch ? 'bg-sky-500/20 text-sky-300' : 'bg-white/5 text-slate-500'}`}>
+                {atbGovMatch ? 'ACTIVE' : 'OFF'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {atbPrograms.map((prog) => {
+            const isSelected = selectedATBProgram === prog.id;
+            return (
+              <button
+                key={prog.id}
+                type="button"
+                onClick={() => handleApplyATBProgram(prog)}
+                className={`text-left p-4 border transition-all flex flex-col justify-between h-48 relative overflow-hidden ${
+                  isSelected
+                    ? 'border-emerald-400 bg-emerald-500/[0.04] shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                    : 'border-white/5 bg-zinc-950/50 hover:border-white/10 hover:bg-zinc-950/80'
+                }`}
+              >
+                {/* Visual Accent */}
+                {isSelected && (
+                  <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500/10 border-b border-l border-emerald-500/20 flex items-center justify-center">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  </div>
+                )}
+                
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8px] font-mono font-bold tracking-wider text-sky-400 bg-sky-900/20 px-2 py-0.5 border border-sky-900/30">
+                      {prog.category}
+                    </span>
+                    <span className="text-[9px] font-mono text-slate-500">
+                      {prog.underwritingStatus}
+                    </span>
+                  </div>
+                  
+                  <h4 className="text-xs font-bold text-white tracking-tight line-clamp-2">
+                    {prog.name}
+                  </h4>
+                  
+                  <p className="text-[10px] text-slate-400 line-clamp-3 leading-snug">
+                    {prog.description}
+                  </p>
+                </div>
+
+                <div className="border-t border-white/5 pt-2.5 mt-2 flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-slate-500">TARGET:</span>
+                  <span className="text-white font-bold">{formatCurrency(prog.targetAmount)}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected ATB Program dynamic diagnostics */}
+        <AnimatePresence mode="wait">
+          {selectedATBProgram && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-4 pt-4 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-mono bg-black/20 px-4 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="text-slate-400">ACTIVE ATB PATH:</span>
+                <span className="text-emerald-400 font-bold">
+                  {atbPrograms.find(p => p.id === selectedATBProgram)?.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-6">
+                <div>
+                  <span className="text-slate-500">BENEFIT:</span>{' '}
+                  <span className="text-white font-bold">
+                    {atbPrograms.find(p => p.id === selectedATBProgram)?.benefit}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedATBProgram(null)}
+                  className="text-rose-400 hover:text-rose-300 hover:underline cursor-pointer"
+                >
+                  [Reset Program]
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

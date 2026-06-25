@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Shield, 
@@ -13,8 +13,10 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   Info,
+  TrendingDown,
+  Sparkles,
   HelpCircle,
-  TrendingDown
+  Coins
 } from 'lucide-react';
 
 // Custom interface for calculated scenarios
@@ -66,9 +68,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export const ProjectedRevenueGrowth = () => {
-  // Input parameters
-  const [operatingMode, setOperatingMode] = useState<'safe-window' | 'open-door' | 'daytime-only'>('safe-window');
-  const [staffingLevel, setStaffingLevel] = useState<number>(1); // overnight staff (1 or 2)
+  // Scenario Planner State variables as requested
+  const [operatingHours, setOperatingHours] = useState<'24' | '16' | '12'>('24');
+  const [securityMode, setSecurityMode] = useState<'safe-window' | 'open-door'>('safe-window');
+  const [wageTier, setWageTier] = useState<'minimum' | 'living' | 'premium'>('living');
+  const [staffingLevel, setStaffingLevel] = useState<number>(1); // overnight staff count (1 or 2)
   const [avgOrderValue, setAvgOrderValue] = useState<number>(18); // $10 to $35
   const [hourlyCustomers, setHourlyCustomers] = useState<number>(15); // 5 to 30
 
@@ -92,18 +96,27 @@ export const ProjectedRevenueGrowth = () => {
 
   // Synchronized dynamic calculations
   const { chartData, metrics, automatedInsight } = useMemo(() => {
-    // 1. Calculate growth multipliers based on custom inputs
-    // Baseline represents: Safe-Window, 15 customers/hr, $18 AOV
+    // 1. Hourly rate map for staffing costs
+    const hourlyWageRate = wageTier === 'minimum' ? 15.00 : wageTier === 'living' ? 18.50 : 22.00;
+
+    // Traffic and AOV ratios
     const trafficRatio = hourlyCustomers / 15;
     const aovRatio = avgOrderValue / 18;
     const overnightPerformanceRatio = trafficRatio * aovRatio;
 
     // Daytime baseline revenues (historically secure channels, fixed)
-    const daytimeY1 = 90000;
-    const daytimeY2 = 132000;
-    const daytimeY3 = 210000;
+    let daytimeY1 = 90000;
+    let daytimeY2 = 132000;
+    let daytimeY3 = 210000;
 
-    // Overnight baseline revenues (highly subject to security adjustments)
+    // Adjust daytime revenue down if hours are severely restricted (e.g. 12-hour limit vs 16-hour)
+    if (operatingHours === '12') {
+      daytimeY1 = daytimeY1 * 0.80;
+      daytimeY2 = daytimeY2 * 0.80;
+      daytimeY3 = daytimeY3 * 0.80;
+    }
+
+    // Overnight baseline revenues (highly subject to security and operational adjustments)
     const baseOvernightY1 = 60000;
     const baseOvernightY2 = 88000;
     const baseOvernightY3 = 140000;
@@ -116,29 +129,33 @@ export const ProjectedRevenueGrowth = () => {
     let overnightLaborY1 = 0;
     let overnightInsuranceY1 = 0;
 
-    if (operatingMode === 'daytime-only') {
+    if (operatingHours !== '24') {
+      // Overnight operations completely closed
       grossOvernightY1 = 0;
       grossOvernightY2 = 0;
       grossOvernightY3 = 0;
+      shrinkageY1 = 0;
+      overnightLaborY1 = 0;
+      overnightInsuranceY1 = 0;
     } else {
-      // Overnight operations active (Safe-Window or Open-Door)
+      // Overnight operations active (24 Hours)
       grossOvernightY1 = baseOvernightY1 * overnightPerformanceRatio;
       grossOvernightY2 = baseOvernightY2 * overnightPerformanceRatio;
       grossOvernightY3 = baseOvernightY3 * overnightPerformanceRatio;
 
-      // Shoplifting/shrinkage leakages
-      if (operatingMode === 'open-door') {
+      // Shoplifting/shrinkage leakages based on security mode
+      if (securityMode === 'open-door') {
         shrinkageY1 = grossOvernightY1 * 0.041; // 4.1% standard open-door shrinkage
       } else {
-        shrinkageY1 = 0; // 0% shrinkage with Safe-Window physical barrier
+        shrinkageY1 = grossOvernightY1 * 0.002; // Very minimal 0.2% shrinkage with physical Safe-Window locked barrier
       }
 
       // Labor costs overnight
-      // 8 hours per night * 365 days = 2920 hours. Estimated wage: $22/hr.
-      overnightLaborY1 = staffingLevel * 22 * 2920;
+      // 8 hours per night * 365 days = 2920 hours. 
+      overnightLaborY1 = staffingLevel * hourlyWageRate * 2920;
 
       // Liability insurance & safety premium surcharges
-      if (operatingMode === 'open-door') {
+      if (securityMode === 'open-door') {
         overnightInsuranceY1 = 6500; // Premium rate due to active physical exposure
       } else {
         overnightInsuranceY1 = 2000; // Discounted high-security commercial rate
@@ -147,13 +164,16 @@ export const ProjectedRevenueGrowth = () => {
 
     // Adjusted Expected Revenues (Gross revenue minus physical shrinkage loss)
     const expectedY1 = daytimeY1 + (grossOvernightY1 - shrinkageY1);
-    const expectedY2 = daytimeY2 + (grossOvernightY2 - (operatingMode === 'open-door' ? grossOvernightY2 * 0.041 : 0));
-    const expectedY3 = daytimeY3 + (grossOvernightY3 - (operatingMode === 'open-door' ? grossOvernightY3 * 0.041 : 0));
+    const expectedY2 = daytimeY2 + (grossOvernightY2 - (operatingHours === '24' ? (securityMode === 'open-door' ? grossOvernightY2 * 0.041 : grossOvernightY2 * 0.002) : 0));
+    const expectedY3 = daytimeY3 + (grossOvernightY3 - (operatingHours === '24' ? (securityMode === 'open-door' ? grossOvernightY3 * 0.041 : grossOvernightY3 * 0.002) : 0));
 
-    // Best-Case Scenario (+20% operational efficiency)
-    const bestY1 = expectedY1 * 1.20;
-    const bestY2 = expectedY2 * 1.22;
-    const bestY3 = expectedY3 * 1.25;
+    // Morale performance coefficient: better wages boost productivity and best case outcomes
+    const moraleFactor = wageTier === 'premium' ? 1.05 : wageTier === 'minimum' ? 0.95 : 1.00;
+
+    // Best-Case Scenario (+20% operational efficiency modified by wage-driven employee productivity)
+    const bestY1 = expectedY1 * 1.20 * moraleFactor;
+    const bestY2 = expectedY2 * 1.22 * moraleFactor;
+    const bestY3 = expectedY3 * 1.25 * moraleFactor;
 
     // Worst-Case Scenario (-20% traffic risk and local inflation)
     const worstY1 = expectedY1 * 0.80;
@@ -167,7 +187,7 @@ export const ProjectedRevenueGrowth = () => {
         bestCase: bestY1, 
         worstCase: worstY1,
         daytime: daytimeY1,
-        overnight: grossOvernightY1 - shrinkageY1
+        overnight: Math.max(0, grossOvernightY1 - shrinkageY1)
       },
       { 
         year: 'Year 2', 
@@ -175,7 +195,7 @@ export const ProjectedRevenueGrowth = () => {
         bestCase: bestY2, 
         worstCase: worstY2,
         daytime: daytimeY2,
-        overnight: grossOvernightY2 - (operatingMode === 'open-door' ? grossOvernightY2 * 0.041 : 0)
+        overnight: Math.max(0, grossOvernightY2 - (operatingHours === '24' ? (securityMode === 'open-door' ? grossOvernightY2 * 0.041 : grossOvernightY2 * 0.002) : 0))
       },
       { 
         year: 'Year 3', 
@@ -183,30 +203,34 @@ export const ProjectedRevenueGrowth = () => {
         bestCase: bestY3, 
         worstCase: worstY3,
         daytime: daytimeY3,
-        overnight: grossOvernightY3 - (operatingMode === 'open-door' ? grossOvernightY3 * 0.041 : 0)
+        overnight: Math.max(0, grossOvernightY3 - (operatingHours === '24' ? (securityMode === 'open-door' ? grossOvernightY3 * 0.041 : grossOvernightY3 * 0.002) : 0))
       }
     ];
 
     // Calculated Year 1 Net Operating Income (NOI)
     // Base Daytime Expenses (Daytime COGS 55% + fixed daytime operation): $55,000
     const daytimeExpensesY1 = 55000;
-    const overnightCogsY1 = (grossOvernightY1 - shrinkageY1) * 0.30; // 30% cost-of-sales overnight
+    const overnightCogsY1 = Math.max(0, (grossOvernightY1 - shrinkageY1)) * 0.30; // 30% cost-of-sales overnight
 
     const totalExpensesY1 = daytimeExpensesY1 + overnightCogsY1 + overnightLaborY1 + overnightInsuranceY1 + shrinkageY1;
     const rawNoi = expectedY1 - totalExpensesY1;
     
-    // Smooth NOI to prevent unrealistic negative numbers under ridiculous scenarios, floor it at $12k
-    const calculatedNoi = Math.max(12000, rawNoi);
+    // Smooth NOI to prevent unrealistic negative numbers, floor at sensible minimums or show real deficit
+    const calculatedNoi = Math.max(8000, rawNoi);
     const calculatedDscr = calculatedNoi / annualDebtService;
 
-    // Custom automated narrative synthesis
+    // Custom automated narrative synthesis matching the selected options
     let insight = "";
-    if (operatingMode === 'safe-window') {
-      insight = "Safe-Window active: Full late-night demand captured securely. Physical separation locks shrinkage at 0.0%, requiring only 1 staff member safely isolated. This secures a strong Debt Service Coverage Ratio (DSCR), satisfying bank risk assessments.";
-    } else if (operatingMode === 'open-door') {
-      insight = "Open-Door active: Inventory leakage rises to 4.1% due to shoplifting, while overnight liability requires at least 2 staff members. Shrunken margins and doubled labor costs significantly erode Net Operating Income, dropping your underwriting rating.";
+    if (operatingHours === '24') {
+      if (securityMode === 'safe-window') {
+        insight = `24/7 continuous operations with Safe-Window is the optimal scenario. Paying a ${wageTier === 'premium' ? 'Premium' : wageTier === 'living' ? 'Living' : 'Minimum'} wage (${wageTier === 'premium' ? '$22.00/hr' : wageTier === 'living' ? '$18.50/hr' : '$15.00/hr'}) maintains solid staff retention. Shoplifting shrinkage is halted at 0.2%, ensuring high NOI and a powerful Debt Service Coverage Ratio (DSCR) of ${calculatedDscr.toFixed(2)}x.`;
+      } else {
+        insight = `24/7 Open-Door operations allow standard customer entry but expose inventory to high safety risks. Shoplifting shrinkage jumps to 4.1% ($${Math.round(shrinkageY1).toLocaleString()}/yr), commercial liability insurance surges, and regulatory compliance requires at least 2 overnight employees. This erodes Net Operating Income considerably.`;
+      }
+    } else if (operatingHours === '16') {
+      insight = `Operating 16 Hours (6:00 AM - 10:00 PM) avoids late-night risk and overnight staffing costs of $${Math.round(overnightLaborY1).toLocaleString()}/yr, but sacrifices 40% of standard commuter sales. Debt coverage shrinks, reducing the overall bank underwriting eligibility.`;
     } else {
-      insight = "Daytime-Only: Surrendering the late-night trade area completely avoids security overhead, but cuts gross sales potential by 40%. This tightens your debt coverage capacity close to bank thresholds.";
+      insight = `Operating strictly 12 Hours (7:00 AM - 7:00 PM) reduces daytime sales by 20% and eliminates overnight channels completely. While it features the lowest operating overhead, the restricted revenue restricts your capacity to comfortably service the $150,000 ATB bank credit.`;
     }
 
     return { 
@@ -218,11 +242,12 @@ export const ProjectedRevenueGrowth = () => {
         dscr: calculatedDscr,
         shrinkage: shrinkageY1,
         labor: overnightLaborY1,
-        insurance: overnightInsuranceY1
+        insurance: overnightInsuranceY1,
+        hourlyWageRate
       },
       automatedInsight: insight 
     };
-  }, [operatingMode, staffingLevel, avgOrderValue, hourlyCustomers, annualDebtService]);
+  }, [operatingHours, securityMode, wageTier, staffingLevel, avgOrderValue, hourlyCustomers, annualDebtService]);
 
   return (
     <motion.section 
@@ -244,7 +269,7 @@ export const ProjectedRevenueGrowth = () => {
         </div>
         
         <div className="flex items-center gap-2 px-3 py-1 bg-zinc-950 border border-white/5 text-[10px] font-mono text-slate-400">
-          <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+          <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
           <span>Real-time underwriting calculations synced</span>
         </div>
       </div>
@@ -254,88 +279,165 @@ export const ProjectedRevenueGrowth = () => {
         {/* Left Interactive Control Panel (Col Span: 5) */}
         <div className="lg:col-span-5 space-y-6 bg-black/45 border border-white/5 p-6 sm:p-8">
           <div className="space-y-1">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <h3 className="text-xs uppercase tracking-wider text-white font-bold flex items-center gap-2">
               <Clock className="w-4 h-4 text-sky-400" />
-              Adjust Operational Variables
+              Adjust Scenario Planner Variables
             </h3>
             <p className="text-[11px] text-slate-400">
-              Manipulate retail conditions below to stress-test financial projections against bank standards.
+              Stress-test business viability by adjusting operating hours, overnight safety modes, and hourly staffing wages.
             </p>
           </div>
 
-          {/* Operating Mode Selector */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
-              Overnight Operational Strategy (10 PM - 6 AM)
+          {/* 1. Operating Hours Selector */}
+          <div className="space-y-2 border-t border-white/5 pt-4">
+            <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex justify-between">
+              <span>Operating Hours</span>
+              <span className="text-sky-400">{operatingHours === '24' ? '24 Hours (Full Uptime)' : operatingHours === '16' ? '16 Hours (Extended)' : '12 Hours (Daytime Only)'}</span>
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setOperatingMode('safe-window');
-                  setStaffingLevel(1); // Auto-optimize staffing to 1
-                }}
-                className={`px-3 py-2.5 border text-center transition-all flex flex-col items-center justify-center gap-1 ${
-                  operatingMode === 'safe-window'
-                    ? 'border-sky-400 bg-sky-400/5 text-sky-400 font-bold'
+                onClick={() => setOperatingHours('24')}
+                className={`py-2 text-center transition-all flex flex-col items-center justify-center border rounded-none ${
+                  operatingHours === '24'
+                    ? 'border-sky-400 bg-sky-400/5 text-sky-400 font-bold shadow-[0_0_10px_rgba(56,189,248,0.1)]'
                     : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-400'
                 }`}
               >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span className="text-[10px] tracking-wider uppercase">Safe-Window</span>
-                <span className="text-[8px] font-mono opacity-50">24/7 Continuous</span>
+                <span className="text-[10px] tracking-wider uppercase font-mono">24 Hours</span>
+                <span className="text-[8px] opacity-50">24/7 Ops</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setOperatingMode('open-door');
-                  setStaffingLevel(2); // Auto-raise staffing for traditional overnight standard
-                }}
-                className={`px-3 py-2.5 border text-center transition-all flex flex-col items-center justify-center gap-1 ${
-                  operatingMode === 'open-door'
-                    ? 'border-amber-500 bg-amber-500/5 text-amber-500 font-bold'
+                onClick={() => setOperatingHours('16')}
+                className={`py-2 text-center transition-all flex flex-col items-center justify-center border rounded-none ${
+                  operatingHours === '16'
+                    ? 'border-sky-400 bg-sky-400/5 text-sky-400 font-bold shadow-[0_0_10px_rgba(56,189,248,0.1)]'
                     : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-400'
                 }`}
               >
-                <ShieldAlert className="w-4 h-4 text-amber-500" />
-                <span className="text-[10px] tracking-wider uppercase">Open-Door</span>
-                <span className="text-[8px] font-mono opacity-50">24/7 Traditional</span>
+                <span className="text-[10px] tracking-wider uppercase font-mono">16 Hours</span>
+                <span className="text-[8px] opacity-50">6 AM - 10 PM</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setOperatingMode('daytime-only');
-                  setStaffingLevel(0); // Closed overnight, zero staffing
-                }}
-                className={`px-3 py-2.5 border text-center transition-all flex flex-col items-center justify-center gap-1 ${
-                  operatingMode === 'daytime-only'
-                    ? 'border-rose-500 bg-rose-500/5 text-rose-500 font-bold'
+                onClick={() => setOperatingHours('12')}
+                className={`py-2 text-center transition-all flex flex-col items-center justify-center border rounded-none ${
+                  operatingHours === '12'
+                    ? 'border-sky-400 bg-sky-400/5 text-sky-400 font-bold shadow-[0_0_10px_rgba(56,189,248,0.1)]'
                     : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-400'
                 }`}
               >
-                <Clock className="w-4 h-4 text-rose-400" />
-                <span className="text-[10px] tracking-wider uppercase">Daytime Only</span>
-                <span className="text-[8px] font-mono opacity-50">Closed Overnight</span>
+                <span className="text-[10px] tracking-wider uppercase font-mono">12 Hours</span>
+                <span className="text-[8px] opacity-50">7 AM - 7 PM</span>
               </button>
             </div>
           </div>
 
+          {/* 2. Staffing Costs / Wage Tier Selector */}
+          <div className="space-y-2 border-t border-white/5 pt-4">
+            <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex justify-between">
+              <span>Staffing Costs (Hourly Rate)</span>
+              <span className="text-emerald-400">${metrics.hourlyWageRate.toFixed(2)}/hr</span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setWageTier('minimum')}
+                className={`py-2 text-center transition-all flex flex-col items-center justify-center border rounded-none ${
+                  wageTier === 'minimum'
+                    ? 'border-emerald-400 bg-emerald-400/5 text-emerald-400 font-bold shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                    : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-400'
+                }`}
+              >
+                <span className="text-[10px] tracking-wider uppercase font-mono">Minimum</span>
+                <span className="text-[8px] opacity-50">$15.00/hr</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWageTier('living')}
+                className={`py-2 text-center transition-all flex flex-col items-center justify-center border rounded-none ${
+                  wageTier === 'living'
+                    ? 'border-emerald-400 bg-emerald-400/5 text-emerald-400 font-bold shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                    : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-400'
+                }`}
+              >
+                <span className="text-[10px] tracking-wider uppercase font-mono">Living Wage</span>
+                <span className="text-[8px] opacity-50">$18.50/hr</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWageTier('premium')}
+                className={`py-2 text-center transition-all flex flex-col items-center justify-center border rounded-none ${
+                  wageTier === 'premium'
+                    ? 'border-emerald-400 bg-emerald-400/5 text-emerald-400 font-bold shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                    : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-400'
+                }`}
+              >
+                <span className="text-[10px] tracking-wider uppercase font-mono">Premium</span>
+                <span className="text-[8px] opacity-50">$22.00/hr</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Conditional Overnight Controls */}
           <AnimatePresence mode="wait">
-            {operatingMode !== 'daytime-only' && (
+            {operatingHours === '24' && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="space-y-5 border-t border-white/5 pt-4 overflow-hidden"
+                className="space-y-4 border-t border-white/5 pt-4 overflow-hidden"
               >
-                {/* Overnight Staffing Level */}
+                {/* Security Mode */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                    Overnight Security Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSecurityMode('safe-window');
+                        setStaffingLevel(1);
+                      }}
+                      className={`py-1.5 border text-[9px] font-mono uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                        securityMode === 'safe-window'
+                          ? 'border-sky-400 bg-sky-400/5 text-sky-400 font-bold'
+                          : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-500'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      Safe-Window (0.2% Shrinkage)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSecurityMode('open-door');
+                        setStaffingLevel(2);
+                      }}
+                      className={`py-1.5 border text-[9px] font-mono uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
+                        securityMode === 'open-door'
+                          ? 'border-amber-500 bg-amber-500/5 text-amber-500 font-bold'
+                          : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-500'
+                      }`}
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+                      Open-Door (4.1% Shrinkage)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Overnight Staff Count */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 text-sky-400" />
-                      Overnight Staffing Level
+                      Overnight Staff Headcount
                     </label>
                     <span className="text-[10px] font-mono font-bold text-white">
                       {staffingLevel} Employee{staffingLevel > 1 ? 's' : ''}
@@ -345,46 +447,34 @@ export const ProjectedRevenueGrowth = () => {
                     <button
                       type="button"
                       onClick={() => setStaffingLevel(1)}
-                      className={`py-1.5 border text-[9px] font-mono uppercase tracking-wider transition-all ${
+                      className={`py-1 text-[9px] border font-mono uppercase tracking-wider transition-all ${
                         staffingLevel === 1 
                           ? 'border-sky-400 bg-sky-400/5 text-sky-400 font-bold' 
                           : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-500'
                       }`}
                     >
-                      1 Employee ($13k/yr)
+                      1 staff ($13k-$19k/yr)
                     </button>
                     <button
                       type="button"
                       onClick={() => setStaffingLevel(2)}
-                      className={`py-1.5 border text-[9px] font-mono uppercase tracking-wider transition-all ${
+                      className={`py-1 text-[9px] border font-mono uppercase tracking-wider transition-all ${
                         staffingLevel === 2 
                           ? 'border-sky-400 bg-sky-400/5 text-sky-400 font-bold' 
                           : 'border-white/5 bg-zinc-950/40 hover:border-white/10 text-slate-500'
                       }`}
                     >
-                      2 Employees ($26k/yr)
+                      2 staff ($26k-$38k/yr)
                     </button>
                   </div>
-                  {operatingMode === 'open-door' && staffingLevel === 1 && (
-                    <div className="flex items-start gap-1.5 bg-amber-500/10 border border-amber-500/20 p-2 text-[9px] text-amber-400">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span>Security Risk Warning: Standard overnight convenience stores require at least 2 active staffers to avoid regulatory or safety citations.</span>
-                    </div>
-                  )}
-                  {operatingMode === 'safe-window' && staffingLevel === 2 && (
-                    <div className="flex items-start gap-1.5 bg-sky-400/10 border border-sky-400/20 p-2 text-[9px] text-sky-300">
-                      <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span>Staff Optimization Note: With the physical Safe-Window locked barrier, 1 employee is highly sufficient and saves $13,000 annually.</span>
-                    </div>
-                  )}
                 </div>
 
-                {/* Average late-night order value */}
-                <div className="space-y-2">
+                {/* Average transaction value */}
+                <div className="space-y-1.5">
                   <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 font-bold">
                     <span className="uppercase flex items-center gap-1.5">
                       <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                      Avg Late-Night Transaction
+                      Avg Late-Night Order
                     </span>
                     <span className="text-white text-xs">${avgOrderValue}</span>
                   </div>
@@ -395,21 +485,21 @@ export const ProjectedRevenueGrowth = () => {
                     step="1"
                     value={avgOrderValue}
                     onChange={(e) => setAvgOrderValue(Number(e.target.value))}
-                    className="w-full accent-sky-400 bg-zinc-800 h-1.5 cursor-pointer"
+                    className="w-full accent-sky-400 bg-zinc-800 h-1 cursor-pointer"
                   />
                   <div className="flex justify-between text-[8px] font-mono text-slate-600">
-                    <span>$10 (Min snacks)</span>
-                    <span>$18 (Default standard)</span>
-                    <span>$35 (High-margin hot foods)</span>
+                    <span>$10</span>
+                    <span>$18 (Std)</span>
+                    <span>$35 (High)</span>
                   </div>
                 </div>
 
-                {/* Hourly Customer Density */}
-                <div className="space-y-2">
+                {/* Hourly Customers */}
+                <div className="space-y-1.5">
                   <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 font-bold">
                     <span className="uppercase flex items-center gap-1.5">
                       <TrendingUp className="w-3.5 h-3.5 text-sky-400" />
-                      Overnight Traffic (Cust/hr)
+                      Hourly Customer Flow
                     </span>
                     <span className="text-white text-xs">{hourlyCustomers} / hr</span>
                   </div>
@@ -420,21 +510,21 @@ export const ProjectedRevenueGrowth = () => {
                     step="1"
                     value={hourlyCustomers}
                     onChange={(e) => setHourlyCustomers(Number(e.target.value))}
-                    className="w-full accent-sky-400 bg-zinc-800 h-1.5 cursor-pointer"
+                    className="w-full accent-sky-400 bg-zinc-800 h-1 cursor-pointer"
                   />
                   <div className="flex justify-between text-[8px] font-mono text-slate-600">
-                    <span>5 cust/hr (Slow)</span>
-                    <span>15 cust/hr (Standard)</span>
-                    <span>30 cust/hr (Peak Delivery)</span>
+                    <span>5/hr (Slow)</span>
+                    <span>15/hr (Std)</span>
+                    <span>30/hr (Peak)</span>
                   </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Dynamic narrative commentary */}
+          {/* Automated narrative insight */}
           <div className="bg-[#050508] border border-white/5 p-4 space-y-2">
-            <span className="text-[9px] font-mono uppercase text-sky-400 font-bold block">Automated Analyst Insight:</span>
+            <span className="text-[9px] font-mono uppercase text-sky-400 font-bold block">Scenario Analyst Insight:</span>
             <p className="text-[11px] text-slate-300 leading-relaxed italic">
               "{automatedInsight}"
             </p>
@@ -448,7 +538,7 @@ export const ProjectedRevenueGrowth = () => {
           <div className="bg-black/25 border border-white/5 p-6 sm:p-8 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h4 className="text-xs uppercase tracking-widest text-slate-300 font-bold font-mono">
-                Line Chart: Dynamic 3-Year Projections
+                Scenario Growth: Best vs. Expected vs. Worst Case
               </h4>
               
               {/* Custom Legend badges with colors */}
@@ -484,7 +574,7 @@ export const ProjectedRevenueGrowth = () => {
                   <Line 
                     type="monotone" 
                     dataKey="bestCase" 
-                    name="Best Case" 
+                    name="Best Case Projections" 
                     stroke="#10b981" 
                     strokeWidth={1.5} 
                     strokeDasharray="4 4"
@@ -494,7 +584,7 @@ export const ProjectedRevenueGrowth = () => {
                   <Line 
                     type="monotone" 
                     dataKey="expected" 
-                    name="Target Expected" 
+                    name="Expected Target" 
                     stroke="#38bdf8" 
                     strokeWidth={3} 
                     dot={{ r: 5 }}
@@ -503,7 +593,7 @@ export const ProjectedRevenueGrowth = () => {
                   <Line 
                     type="monotone" 
                     dataKey="worstCase" 
-                    name="Worst Case" 
+                    name="Worst Case Scenario" 
                     stroke="#f43f5e" 
                     strokeWidth={1.5} 
                     strokeDasharray="4 4"
@@ -520,17 +610,17 @@ export const ProjectedRevenueGrowth = () => {
             
             {/* Year 1 Adjusted Revenue */}
             <div className="bg-black/30 border border-white/5 p-4 space-y-1">
-              <span className="text-[9px] font-mono uppercase text-slate-500 font-bold block">Y1 Gross Sales</span>
+              <span className="text-[9px] font-mono uppercase text-slate-500 font-bold block">Y1 Adjusted Gross Sales</span>
               <div className="text-xl font-mono font-bold text-white">
                 ${Math.round(metrics.totalRevenueY1).toLocaleString()}
               </div>
               <p className="text-[9.5px] text-slate-400 flex items-center gap-1">
-                {operatingMode === 'daytime-only' ? (
+                {operatingHours !== '24' ? (
                   <TrendingDown className="w-3 h-3 text-rose-500" />
                 ) : (
                   <TrendingUp className="w-3 h-3 text-emerald-400" />
                 )}
-                {operatingMode === 'daytime-only' ? 'No late-night channel' : 'Overnight active'}
+                {operatingHours === '24' ? '24/7 Channel Active' : 'Restricted Hours'}
               </p>
             </div>
 
@@ -541,7 +631,7 @@ export const ProjectedRevenueGrowth = () => {
                 ${Math.round(metrics.noiY1).toLocaleString()}
               </div>
               <p className="text-[9.5px] text-slate-400">
-                After labor, shrinkage, & COGS
+                After labor, shrinkage & overhead
               </p>
             </div>
 
@@ -568,7 +658,7 @@ export const ProjectedRevenueGrowth = () => {
                 {metrics.dscr >= 1.25 ? (
                   <span className="text-slate-400">Safe: Exceeds bank 1.25x limit.</span>
                 ) : (
-                  <span className="text-rose-400 font-bold">Danger: Under 1.25x limit.</span>
+                  <span className="text-rose-400 font-bold animate-pulse">Danger: Under 1.25x limit.</span>
                 )}
               </div>
             </div>
@@ -576,39 +666,37 @@ export const ProjectedRevenueGrowth = () => {
           </div>
 
           {/* Underwriter Cost Leakage breakdown */}
-          {operatingMode !== 'daytime-only' && (
-            <div className="bg-zinc-950/60 border border-white/5 p-4">
-              <h5 className="text-[10px] font-mono uppercase text-slate-400 font-bold mb-2.5 border-b border-white/5 pb-1.5">
-                Overnight Cost & Safety Breakdown (Year 1)
-              </h5>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[11px] font-mono">
-                <div>
-                  <span className="text-slate-500 block">Shrinkage Loss:</span>
-                  <span className={metrics.shrinkage > 0 ? 'text-rose-400 font-bold' : 'text-slate-400'}>
-                    ${Math.round(metrics.shrinkage).toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Overnight Labor:</span>
-                  <span className="text-slate-300 font-bold">
-                    ${Math.round(metrics.labor).toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Insurance Premium:</span>
-                  <span className="text-slate-300 font-bold">
-                    ${Math.round(metrics.insurance).toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Collateral Security Rating:</span>
-                  <span className={`font-bold ${operatingMode === 'safe-window' ? 'text-emerald-400' : 'text-amber-500'}`}>
-                    {operatingMode === 'safe-window' ? 'HIGH (UL Level 3)' : 'LOW (Exposed)'}
-                  </span>
-                </div>
+          <div className="bg-zinc-950/60 border border-white/5 p-4">
+            <h5 className="text-[10px] font-mono uppercase text-slate-400 font-bold mb-2.5 border-b border-white/5 pb-1.5">
+              Cost & Wage Simulation Analysis (Year 1)
+            </h5>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[11px] font-mono">
+              <div>
+                <span className="text-slate-500 block">Theft/Shrinkage Loss:</span>
+                <span className={metrics.shrinkage > 0 ? 'text-rose-400 font-bold' : 'text-slate-400'}>
+                  ${Math.round(metrics.shrinkage).toLocaleString()}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Annual Staffing Cost:</span>
+                <span className="text-emerald-400 font-bold">
+                  ${Math.round(metrics.labor).toLocaleString()}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Liability Premium:</span>
+                <span className="text-slate-300 font-bold">
+                  ${Math.round(metrics.insurance).toLocaleString()}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Security Class rating:</span>
+                <span className={`font-bold ${operatingHours !== '24' ? 'text-slate-400' : securityMode === 'safe-window' ? 'text-emerald-400' : 'text-amber-500'}`}>
+                  {operatingHours !== '24' ? 'N/A' : securityMode === 'safe-window' ? 'HIGH (Level 3)' : 'LOW (Exposed)'}
+                </span>
               </div>
             </div>
-          )}
+          </div>
 
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, ArrowRight, ShieldCheck, TrendingUp, Building, Clock, MapPin, Send } from 'lucide-react';
+import { Mail, ArrowRight, ShieldCheck, TrendingUp, Building, Clock, MapPin, Send, Compass } from 'lucide-react';
 import { motion } from 'motion/react';
 import { initAuth, googleSignIn, logout } from '../lib/auth';
 import { sendEmail } from '../lib/gmail';
@@ -27,12 +27,27 @@ import { InvestorSentiment } from './InvestorSentiment';
 import { NotebookLMBriefing } from './NotebookLMBriefing';
 import { InvestorPortal } from './InvestorPortal';
 import { InvestorROIVisualizer } from './InvestorROIVisualizer';
+import { AIPlanningStudio } from './AIPlanningStudio';
+import { GuidedTourOverlay } from './GuidedTourOverlay';
+import { SafetyPortalSplashScreen } from './SafetyPortalSplashScreen';
+import { FranchiseExpansion } from './FranchiseExpansion';
 
 export const BusinessPlan = () => {
   const [needsAuth, setNeedsAuth] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const handleStartSplash = () => {
+      setShowSplash(true);
+    };
+    window.addEventListener('start-safety-splash', handleStartSplash);
+    return () => {
+      window.removeEventListener('start-safety-splash', handleStartSplash);
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = initAuth(
@@ -101,6 +116,8 @@ export const BusinessPlan = () => {
   return (
     <div className="min-h-screen bg-[#050505] text-[#e0e0e0] font-sans selection:bg-sky-500/30 relative">
       <VoiceAssistant />
+      <GuidedTourOverlay />
+      {showSplash && <SafetyPortalSplashScreen onComplete={() => setShowSplash(false)} />}
 
       {/* Navigation / Header */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#050505]/80 backdrop-blur-md border-b border-white/10 px-8 py-6 flex justify-between items-end">
@@ -112,6 +129,22 @@ export const BusinessPlan = () => {
           </div>
         </div>
         <div className="flex items-center space-x-4">
+          <button 
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('start-safety-splash'))}
+            className="flex items-center space-x-1.5 border border-emerald-400/40 hover:border-emerald-400 bg-emerald-400/5 hover:bg-emerald-400/10 text-emerald-400 px-4 py-2 rounded-none text-[10px] tracking-widest uppercase font-bold transition-all cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Portal Demo</span>
+          </button>
+          <button 
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('start-guided-tour'))}
+            className="flex items-center space-x-1.5 border border-sky-400/40 hover:border-sky-400 bg-sky-400/5 hover:bg-sky-400/10 text-sky-400 px-4 py-2 rounded-none text-[10px] tracking-widest uppercase font-bold transition-all cursor-pointer shadow-[0_0_15px_rgba(56,189,248,0.1)]"
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>Guided Investor Tour</span>
+          </button>
           <div className="hidden md:block">
             <InvestorSentiment variant="compact" />
           </div>
@@ -161,6 +194,7 @@ export const BusinessPlan = () => {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          id="hero-revenue-projection"
           className="grid grid-cols-1 lg:grid-cols-12 gap-0 items-center mb-16 border border-white/10 bg-gradient-to-b from-transparent to-sky-950/20"
         >
           <div className="col-span-5 p-12 border-r border-white/10 flex flex-col justify-between h-full">
@@ -243,6 +277,7 @@ export const BusinessPlan = () => {
         </motion.div>
 
         {/* Detailed Sections */}
+        <AIPlanningStudio />
         <ExecutiveSummary />
         <InvestorSentiment variant="full" />
         <NotebookLMBriefing />
@@ -257,6 +292,7 @@ export const BusinessPlan = () => {
         <SmartSecurityDashboard />
         <SWOTAnalysis />
         <MarketingStrategy />
+        <FranchiseExpansion />
         <DetailedFinancials />
         <InvestorROIVisualizer />
         <LoanReadinessDashboard />
