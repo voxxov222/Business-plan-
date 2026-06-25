@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Syne", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-brand-bg: #050A0F;
+  --color-brand-bg2: #0A1520;
+  --color-brand-bg3: #0E1C2C;
+  --color-brand-card: #0D1B2A;
+  --color-brand-card2: #111F30;
+  --color-brand-border: #182D47;
+  --color-brand-border2: #1E3A5F;
+  --color-brand-blue: #0060A8;
+  --color-brand-blue2: #0085E6;
+  --color-brand-blue3: #40AEFF;
+  --color-brand-gold: #C8961A;
+  --color-brand-gold2: #F0B830;
+  --color-brand-text: #EFF4F9;
+  --color-brand-text2: #8BA5C2;
+  --color-brand-text3: #4E6A87;
+  --color-brand-green: #1A8C5C;
+  --color-brand-green2: #22B674;
+}
+
+body {
+  @apply bg-brand-bg text-brand-text;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "SafeMart Business Plan",
+  "description": "Interactive business plan for a new convenience store with a safe-window solution, featuring 3D visualizations and Voice Assistant.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

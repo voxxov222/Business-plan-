@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "Comment": {
+      "title": "Comment",
+      "description": "Investor questions and comments on specific business plan sections",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique comment identifier"
+        },
+        "sectionId": {
+          "type": "string",
+          "description": "Identifier of the business plan section"
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Name of the comment author"
+        },
+        "authorEmail": {
+          "type": "string",
+          "description": "Email of the comment author"
+        },
+        "authorPhoto": {
+          "type": "string",
+          "description": "Photo URL of the comment author"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "Firebase Authentication UID of the author"
+        },
+        "text": {
+          "type": "string",
+          "description": "Body content of the comment"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "resolved": {
+          "type": "boolean",
+          "description": "Whether the question or feedback has been resolved"
+        },
+        "response": {
+          "type": "string",
+          "description": "Official reply from the business owner"
+        },
+        "responseAuthorName": {
+          "type": "string",
+          "description": "Name of the person replying"
+        },
+        "responseCreatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Reply timestamp"
+        }
+      },
+      "required": [
+        "sectionId",
+        "authorName",
+        "authorEmail",
+        "authorUid",
+        "text",
+        "createdAt",
+        "resolved"
+      ]
+    }
+  },
+  "firestore": {
+    "/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments and questions submitted by potential investors"
+    }
+  }
+}

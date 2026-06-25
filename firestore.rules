@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner() {
+      return request.auth.token.email == 'toddwilliam420@gmail.com';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation helper for Comment entities
+    function isValidComment(data) {
+      return data.sectionId is string && data.sectionId.size() <= 100
+        && data.authorName is string && data.authorName.size() <= 200
+        && data.authorEmail is string && data.authorEmail.size() <= 200
+        && data.authorUid is string && data.authorUid == request.auth.uid
+        && data.text is string && data.text.size() <= 2000
+        && data.resolved is bool;
+    }
+
+    // Comments collection rules
+    match /comments/{commentId} {
+      allow get: if isSignedIn() && isValidId(commentId);
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() 
+        && isEmailVerified() 
+        && isValidId(commentId) 
+        && isValidComment(incoming()) 
+        && incoming().createdAt == request.time;
+
+      allow update: if isSignedIn() 
+        && isEmailVerified() 
+        && isValidId(commentId) 
+        && (
+          // Action 1: Owner reply
+          (isOwner() && incoming().diff(existing()).affectedKeys().hasOnly(['response', 'responseAuthorName', 'responseCreatedAt', 'resolved']) 
+            && incoming().response is string && incoming().response.size() <= 2000 
+            && incoming().responseCreatedAt == request.time 
+            && incoming().resolved is bool) ||
+          
+          // Action 2: Author edit comment text
+          (existing().authorUid == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text']) 
+            && incoming().text is string && incoming().text.size() <= 2000) ||
+          
+          // Action 3: Toggle resolved flag (Author or Owner)
+          ((existing().authorUid == request.auth.uid || isOwner()) && incoming().diff(existing()).affectedKeys().hasOnly(['resolved']) 
+            && incoming().resolved is bool)
+        );
+
+      allow delete: if isSignedIn() 
+        && isEmailVerified() 
+        && isValidId(commentId) 
+        && (existing().authorUid == request.auth.uid || isOwner());
+    }
+  }
+}
